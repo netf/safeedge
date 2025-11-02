@@ -1,0 +1,73 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+dist/
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage/
+
+# Go workspace file
+go.work
+go.work.sum
+
+# Dependency directories
+vendor/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+
+# Docker volumes
+data/
+postgres_data/
+redis_data/
+minio_data/
+
+# Node.js (for E2E tests)
+node_modules/
+e2e/node_modules/
+e2e/playwright-report/
+e2e/test-results/
+e2e/.npm/
+
+# Claude Code settings (local only)
+.claude/settings.local.json
+.claude/session-history/
+.claude/projects/
+
+# Keep shared Claude Code configurations
+!.claude/commands/
+!.claude/hooks/
+
+# OS-specific files
+Thumbs.db
