@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	pb "github.com/netf/safeedge/api/proto/gen"
+	"github.com/netf/safeedge/internal/agent/enrollment"
 )
 
 var (
@@ -41,11 +42,19 @@ func main() {
 		RunE:  enrollDevice,
 	}
 
+	var enrollmentToken, siteTag, identityPath string
+
 	runCmd.Flags().StringVar(&controlPlaneURL, "control-plane", getEnv("CONTROL_PLANE_URL", "localhost:9090"), "Control plane gRPC address")
-	runCmd.Flags().StringVar(&deviceID, "device-id", getEnv("DEVICE_ID", ""), "Device ID (required)")
+	runCmd.Flags().StringVar(&deviceID, "device-id", getEnv("DEVICE_ID", ""), "Device ID (from identity file)")
+	runCmd.Flags().StringVar(&identityPath, "identity", getEnv("IDENTITY_PATH", "/var/lib/safeedge/identity.json"), "Path to identity file")
 	runCmd.Flags().StringVar(&logLevel, "log-level", getEnv("LOG_LEVEL", "info"), "Log level (debug, info, warn, error)")
 
 	enrollCmd.Flags().StringVar(&controlPlaneURL, "control-plane", getEnv("CONTROL_PLANE_URL", "http://localhost:8080"), "Control plane HTTP address")
+	enrollCmd.Flags().StringVar(&enrollmentToken, "token", getEnv("ENROLLMENT_TOKEN", ""), "Enrollment token (required)")
+	enrollCmd.Flags().StringVar(&siteTag, "site-tag", getEnv("SITE_TAG", ""), "Site tag for device grouping")
+	enrollCmd.Flags().StringVar(&identityPath, "identity", getEnv("IDENTITY_PATH", "/var/lib/safeedge/identity.json"), "Path to save identity file")
+
+	enrollCmd.MarkFlagRequired("token")
 
 	rootCmd.AddCommand(runCmd, enrollCmd)
 
@@ -62,17 +71,31 @@ func runAgent(cmd *cobra.Command, args []string) error {
 	}
 	defer logger.Sync()
 
-	if deviceID == "" {
-		return fmt.Errorf("device-id is required")
+	identityPath, _ := cmd.Flags().GetString("identity")
+
+	// Load device identity
+	identity, err := enrollment.LoadIdentity(identityPath)
+	if err != nil {
+		return fmt.Errorf("failed to load identity (run 'enroll' first): %w", err)
+	}
+
+	deviceID = identity.DeviceID
+
+	// Extract gRPC address from control plane URL
+	// If HTTP URL, convert to gRPC (port 9090)
+	grpcURL := controlPlaneURL
+	if controlPlaneURL == "localhost:9090" || controlPlaneURL == "" {
+		grpcURL = "localhost:9090"
 	}
 
 	logger.Info("starting SafeEdge agent",
 		zap.String("device_id", deviceID),
-		zap.String("control_plane", controlPlaneURL),
+		zap.String("control_plane", grpcURL),
+		zap.String("wireguard_ip", identity.WireguardIP),
 	)
 
 	// Connect to control plane gRPC
-	conn, err := grpc.NewClient(controlPlaneURL, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(grpcURL, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return fmt.Errorf("failed to connect to control plane: %w", err)
 	}
@@ -137,15 +160,25 @@ func runAgent(cmd *cobra.Command, args []string) error {
 }
 
 func enrollDevice(cmd *cobra.Command, args []string) error {
-	// TODO: Implement device enrollment
-	// This will:
-	// 1. Generate Ed25519 keypair
-	// 2. Generate WireGuard keypair
-	// 3. Call enrollment API with token
-	// 4. Store identity.json
-	// 5. Configure WireGuard tunnel
+	enrollmentToken, _ := cmd.Flags().GetString("token")
+	siteTag, _ := cmd.Flags().GetString("site-tag")
+	identityPath, _ := cmd.Flags().GetString("identity")
 
-	fmt.Println("Enrollment not yet implemented")
+	fmt.Printf("Enrolling device with control plane at %s...\n", controlPlaneURL)
+
+	identity, err := enrollment.Enroll(controlPlaneURL, enrollmentToken, siteTag, identityPath)
+	if err != nil {
+		return fmt.Errorf("enrollment failed: %w", err)
+	}
+
+	fmt.Println("✓ Enrollment successful!")
+	fmt.Printf("  Device ID: %s\n", identity.DeviceID)
+	fmt.Printf("  WireGuard IP: %s\n", identity.WireguardIP)
+	fmt.Printf("  Identity saved to: %s\n", identityPath)
+	fmt.Println("\nNext steps:")
+	fmt.Printf("  1. Run agent: safeedge-agent run --identity %s\n", identityPath)
+	fmt.Println("  2. Configure WireGuard tunnel (TODO)")
+
 	return nil
 }
 

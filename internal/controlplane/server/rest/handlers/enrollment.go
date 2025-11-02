@@ -134,9 +134,20 @@ func EnrollDevice(queries *generated.Queries, logger *zap.Logger) http.HandlerFu
 			return
 		}
 
-		// TODO: Allocate WireGuard IP from pool
-		// For now, use a placeholder
-		wireguardIP := net.ParseIP("10.100.0.1")
+		// Allocate WireGuard IP from pool
+		// For M0, use simple sequential allocation
+		// In production, implement proper IPAM with IP pool management
+		deviceCount, err := queries.CountDevicesByStatus(r.Context(), generated.CountDevicesByStatusParams{
+			OrganizationID: enrollmentToken.OrganizationID,
+			Status:         "ACTIVE",
+		})
+		if err != nil {
+			logger.Error("failed to count devices", zap.Error(err))
+			deviceCount = 0
+		}
+
+		// Allocate IP: 10.100.0.x where x = deviceCount + 2 (skip .0 and .1)
+		wireguardIP := net.IPv4(10, 100, 0, byte(deviceCount+2))
 
 		// Create device
 		device, err := queries.CreateDevice(r.Context(), generated.CreateDeviceParams{
