@@ -1,0 +1,66 @@
+version: '3.8'
+
+networks:
+  safeedge-e2e:
+    driver: bridge
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: safeedge-e2e-postgres
+    networks:
+      - safeedge-e2e
+    environment:
+      POSTGRES_DB: safeedge_test
+      POSTGRES_USER: safeedge
+      POSTGRES_PASSWORD: safeedge
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./internal/controlplane/database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U safeedge"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: safeedge-e2e-redis
+    networks:
+      - safeedge-e2e
+    ports:
+      - "6380:6379"
+
+  minio:
+    image: minio/minio:latest
+    container_name: safeedge-e2e-minio
+    networks:
+      - safeedge-e2e
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: safeedge
+      MINIO_ROOT_PASSWORD: safeedge123
+    ports:
+      - "9002:9000"
+
+  control-plane:
+    build:
+      context: .
+      dockerfile: Dockerfile.control-plane
+    container_name: safeedge-e2e-control-plane
+    networks:
+      - safeedge-e2e
+    ports:
+      - "8081:8080"
+      - "9091:9090"
+    environment:
+      HTTP_PORT: "8080"
+      GRPC_PORT: "9090"
+      DATABASE_URL: "postgres://safeedge:safeedge@postgres:5432/safeedge_test?sslmode=disable"
+      REDIS_URL: "redis://redis:6379"
+      S3_ENDPOINT: "http://minio:9000"
+      LOG_LEVEL: "debug"
+    depends_on:
+      postgres:
+        condition: service_healthy

@@ -1,0 +1,101 @@
+syntax = "proto3";
+
+package safeedge.v1;
+
+option go_package = "github.com/netf/safeedge/api/proto/gen;safeedgev1";
+
+import "google/protobuf/timestamp.proto";
+
+// DeviceService handles bidirectional streaming between devices and control plane
+service DeviceService {
+  // DeviceStream establishes a persistent bidirectional stream for device communication
+  rpc DeviceStream(stream DeviceMessage) returns (stream ControlMessage);
+}
+
+// DeviceMessage represents messages sent from device to control plane
+message DeviceMessage {
+  oneof payload {
+    HeartbeatRequest heartbeat = 1;
+    HealthReport health = 2;
+    UpdateAck update_ack = 3;
+  }
+}
+
+// ControlMessage represents messages sent from control plane to device
+message ControlMessage {
+  oneof payload {
+    HeartbeatAck heartbeat_ack = 1;
+    UpdateNotification update = 2;
+    RollbackRequest rollback = 3;
+  }
+}
+
+// HeartbeatRequest sent periodically by device to indicate it's online
+message HeartbeatRequest {
+  string device_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string agent_version = 3;
+  DeviceMetrics metrics = 4;
+}
+
+// HeartbeatAck acknowledges receipt of heartbeat
+message HeartbeatAck {
+  google.protobuf.Timestamp timestamp = 1;
+}
+
+// DeviceMetrics contains device health and performance metrics
+message DeviceMetrics {
+  double cpu_percent = 1;
+  double memory_percent = 2;
+  uint64 disk_used_bytes = 3;
+  uint64 disk_total_bytes = 4;
+  double uptime_seconds = 5;
+}
+
+// HealthReport contains health check results after an update
+message HealthReport {
+  string device_id = 1;
+  string rollout_id = 2;
+  bool healthy = 3;
+  string health_check_url = 4;
+  int32 http_status_code = 5;
+  string error_message = 6;
+  google.protobuf.Timestamp timestamp = 7;
+}
+
+// UpdateNotification instructs device to download and apply an update
+message UpdateNotification {
+  string rollout_id = 1;
+  string artifact_id = 2;
+  string artifact_url = 3;
+  string blake3_hash = 4;
+  bytes signature = 5;
+  string signing_key_id = 6;
+  int64 size_bytes = 7;
+  string health_check_url = 8;
+  int32 soak_time_seconds = 9;
+}
+
+// UpdateAck acknowledges receipt and status of update
+message UpdateAck {
+  string device_id = 1;
+  string rollout_id = 2;
+  UpdateStatus status = 3;
+  string error_message = 4;
+  google.protobuf.Timestamp timestamp = 5;
+}
+
+enum UpdateStatus {
+  UPDATE_STATUS_UNSPECIFIED = 0;
+  UPDATE_STATUS_DOWNLOADING = 1;
+  UPDATE_STATUS_VERIFYING = 2;
+  UPDATE_STATUS_APPLYING = 3;
+  UPDATE_STATUS_SUCCESS = 4;
+  UPDATE_STATUS_FAILED = 5;
+}
+
+// RollbackRequest instructs device to rollback to previous version
+message RollbackRequest {
+  string rollout_id = 1;
+  string reason = 2;
+}
